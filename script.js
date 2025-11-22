@@ -11,15 +11,6 @@
 // @homepage           https://github.com/leisurefire/TwitterMediaDownloader
 // @license            MIT
 // @icon               https://raw.githubusercontent.com/ChinaGodMan/UserScriptsHistory/main/scriptsIcon/x.svg
-// @compatible         chrome
-// @compatible         firefox
-// @compatible         edge
-// @compatible         opera
-// @compatible         safari
-// @compatible         kiwi
-// @compatible         qq
-// @compatible         via
-// @compatible         brave
 // @grant              GM_registerMenuCommand
 // @grant              GM_setValue
 // @grant              GM_getValue
@@ -27,11 +18,9 @@
 // @match              https://x.com/*
 // @match              https://twitter.com/*
 // @version            2025.04.28.1719
-// @created            2025-03-11 08:11:29
-// @modified           2025-03-11 08:11:29
 // @require            https://cdnjs.cloudflare.com/ajax/libs/jszip/3.7.1/jszip.min.js
-// @downloadURL https://update.greasyfork.org/scripts/529453/TwitterX%20Media%20Downloader.user.js
-// @updateURL https://update.greasyfork.org/scripts/529453/TwitterX%20Media%20Downloader.meta.js
+// @downloadURL https://raw.githubusercontent.com/leisurefire/TwitterMediaDownloader/refs/heads/main/script.js
+// @updateURL https://raw.githubusercontent.com/leisurefire/TwitterMediaDownloader/refs/heads/main/script.js
 // ==/UserScript==
 
 //! 修复代码来自:goemon2017:https://greasyfork.org/scripts/423001/discussions/296626#comment-589742
