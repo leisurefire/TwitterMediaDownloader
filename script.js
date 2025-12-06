@@ -760,39 +760,270 @@ const TMD = (function () {
       },
     },
     css: `
+/* 信息流页面按钮 - 默认深浅色，hover 时蓝色 */
 .tmd-down {margin-left: 12px; order: 99;}
-.tmd-down:hover > div > div > div > div {color: rgba(15, 20, 25, 1.0);}
-.tmd-down:hover > div > div > div > div > div {background-color: rgba(15, 20, 25, 0.1);}
-.tmd-down:active > div > div > div > div > div {background-color: rgba(15, 20, 25, 0.2);}
-.tmd-down:hover svg {color: rgba(15, 20, 25, 1.0);}
-.tmd-down:hover div:first-child:not(:last-child) {background-color: rgba(15, 20, 25, 0.1);}
-.tmd-down:active div:first-child:not(:last-child) {background-color: rgba(15, 20, 25, 0.2);}
+
+/* 默认状态 - 深色文字 */
+.tmd-down svg {color: rgb(83, 100, 113);}
+
+/* Hover 状态 - Twitter 蓝色 #1D9BF0 */
+.tmd-down:hover > div > div > div > div {color: rgb(29, 155, 240);}
+.tmd-down:hover > div > div > div > div > div {
+  background-color: rgba(29, 155, 240, 0.1);
+}
+.tmd-down:active > div > div > div > div > div {
+  background-color: rgba(29, 155, 240, 0.2);
+}
+.tmd-down:hover svg {color: rgb(29, 155, 240);}
+.tmd-down:hover div:first-child:not(:last-child) {
+  background-color: rgba(29, 155, 240, 0.1);
+}
+.tmd-down:active div:first-child:not(:last-child) {
+  background-color: rgba(29, 155, 240, 0.2);
+}
+
+/* 深色模式 - 默认浅色，hover 时蓝色 */
+@media (prefers-color-scheme: dark) {
+  .tmd-down svg {color: rgb(113, 118, 123);}
+  .tmd-down:hover > div > div > div > div {color: rgb(29, 155, 240);}
+  .tmd-down:hover > div > div > div > div > div {
+    background-color: rgba(29, 155, 240, 0.1);
+  }
+  .tmd-down:active > div > div > div > div > div {
+    background-color: rgba(29, 155, 240, 0.2);
+  }
+  .tmd-down:hover svg {color: rgb(29, 155, 240);}
+  .tmd-down:hover div:first-child:not(:last-child) {
+    background-color: rgba(29, 155, 240, 0.1);
+  }
+  .tmd-down:active div:first-child:not(:last-child) {
+    background-color: rgba(29, 155, 240, 0.2);
+  }
+}
+
+/* 媒体页按钮 - 深浅色配色 + 毛玻璃 + hover 蓝色 */
 .tmd-down.tmd-media {position: absolute; right: 0;}
-.tmd-down.tmd-media > div {display: flex; border-radius: 99px; margin: 2px;}
-.tmd-down.tmd-media > div > div {display: flex; margin: 6px; color: #fff;}
-.tmd-down.tmd-media:hover > div {background-color: rgba(255,255,255, 0.6);}
-.tmd-down.tmd-media:hover > div > div {color: rgba(15, 20, 25, 1.0);}
-.tmd-down.tmd-media:not(:hover) > div > div {filter: drop-shadow(0 0 1px #000);}
+.tmd-down.tmd-media > div {
+  display: flex;
+  border-radius: 99px;
+  margin: 2px;
+  transition: all 0.2s ease;
+}
+/* 默认状态 - 白色背景 + 深色图标 */
+.tmd-down.tmd-media > div > div {
+  display: flex; 
+  margin: 6px; 
+  color: rgb(15, 20, 25);
+}
+/* Hover 状态 - Twitter 蓝色 */
+.tmd-down.tmd-media:hover > div {
+  background-color: rgba(29, 155, 240, 0.9);
+  backdrop-filter: blur(12px) saturate(180%);
+  -webkit-backdrop-filter: blur(12px) saturate(180%);
+  box-shadow: 0 2px 8px rgba(29, 155, 240, 0.3);
+}
+.tmd-down.tmd-media:hover > div > div {color: rgb(255, 255, 255);}
+.tmd-down.tmd-media:not(:hover) > div > div {filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.8));}
+
+/* 深色模式 */
+@media (prefers-color-scheme: dark) {
+  .tmd-down.tmd-media > div > div {color: rgb(239, 243, 244);}
+  .tmd-down.tmd-media:hover > div {
+    background-color: rgba(29, 155, 240, 0.9);
+    backdrop-filter: blur(12px) saturate(180%);
+    -webkit-backdrop-filter: blur(12px) saturate(180%);
+    box-shadow: 0 2px 8px rgba(29, 155, 240, 0.3);
+  }
+  .tmd-down.tmd-media:hover > div > div {color: rgb(255, 255, 255);}
+  .tmd-down.tmd-media:not(:hover) > div > div {filter: drop-shadow(0 0 1px rgba(255, 255, 255, 0.8));}
+}
+
+/* 图标状态 */
 .tmd-down g {display: none;}
-.tmd-down.download g.download, .tmd-down.completed g.completed, .tmd-down.loading g.loading,.tmd-down.failed g.failed {display: unset;}
+.tmd-down.download g.download, .tmd-down.completed g.completed, .tmd-down.loading g.loading, .tmd-down.failed g.failed {display: unset;}
 .tmd-down.loading svg {animation: spin 1s linear infinite;}
 @keyframes spin {0% {transform: rotate(0deg);} 100% {transform: rotate(360deg);}}
-.tmd-btn {display: inline-block; background-color: #0F1419; color: #FFFFFF; padding: 0 20px; border-radius: 99px;}
-.tmd-tag {display: inline-block; background-color: #FFFFFF; color: #0F1419; padding: 0 10px; border-radius: 10px; border: 1px solid #536471;  font-weight: bold; margin: 5px;}
+
+/* 设置面板按钮和标签 - 深浅色自适应 */
+.tmd-btn {
+  display: inline-block; 
+  background-color: rgb(15, 20, 25); 
+  color: rgb(255, 255, 255); 
+  padding: 0 20px; 
+  border-radius: 99px;
+  font-weight: 600;
+  transition: background-color 0.2s;
+}
 .tmd-btn:hover {background-color: rgba(15, 20, 25, 0.9);}
-.tmd-tag:hover {background-color: rgba(15, 20, 25, 0.1);}
-.tmd-notifier {display: none; position: fixed; left: 16px; bottom: 16px; color: #0F1419; background: #fff; border: 1px solid #ccc; border-radius: 8px; padding: 4px;}
-.tmd-notifier.running {display: flex; align-items: center;}
-.tmd-notifier label {display: inline-flex; align-items: center; margin: 0 8px;}
-.tmd-notifier label:before {content: " "; width: 32px; height: 16px; background-position: center; background-repeat: no-repeat;}
-.tmd-notifier label:nth-child(1):before {background-image:url("data:image/svg+xml;charset=utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2216%22 height=%2216%22 viewBox=%220 0 24 24%22><path d=%22M3,14 v5 q0,2 2,2 h14 q2,0 2,-2 v-5 M7,10 l4,4 q1,1 2,0 l4,-4 M12,3 v11%22 fill=%22none%22 stroke=%22%23536471%22 stroke-width=%222%22 stroke-linecap=%22round%22 /></svg>");}
-.tmd-notifier label:nth-child(2):before {background-image:url("data:image/svg+xml;charset=utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2216%22 height=%2216%22 viewBox=%220 0 24 24%22><path d=%22M12,2 a1,1 0 0 1 0,20 a1,1 0 0 1 0,-20 M12,5 v7 h6%22 fill=%22none%22 stroke=%22%23536471%22 stroke-width=%222%22 stroke-linejoin=%22round%22 stroke-linecap=%22round%22 /></svg>");}
-.tmd-notifier label:nth-child(3):before {background-image:url("data:image/svg+xml;charset=utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2216%22 height=%2216%22 viewBox=%220 0 24 24%22><path d=%22M12,0 a2,2 0 0 0 0,24 a2,2 0 0 0 0,-24%22 fill=%22%23f66%22 stroke=%22none%22 /><path d=%22M14.5,5 a1,1 0 0 0 -5,0 l0.5,9 a1,1 0 0 0 4,0 z M12,17 a2,2 0 0 0 0,5 a2,2 0 0 0 0,-5%22 fill=%22%23fff%22 stroke=%22none%22 /></svg>");}
+
+.tmd-tag {
+  display: inline-block; 
+  background-color: transparent; 
+  color: rgb(15, 20, 25); 
+  padding: 0 10px; 
+  border-radius: 10px; 
+  border: 1px solid rgb(207, 217, 222);
+  font-weight: 600;
+  margin: 5px;
+  transition: background-color 0.2s;
+  cursor: pointer;
+}
+.tmd-tag:hover {background-color: rgba(15, 20, 25, 0.08);}
+
+@media (prefers-color-scheme: dark) {
+  .tmd-btn {background-color: rgb(239, 243, 244); color: rgb(15, 20, 25);}
+  .tmd-btn:hover {background-color: rgba(239, 243, 244, 0.9);}
+  .tmd-tag {color: rgb(239, 243, 244); border-color: rgb(83, 100, 113);}
+  .tmd-tag:hover {background-color: rgba(239, 243, 244, 0.08);}
+}
+
+/* 下载进度通知器 - 增大尺寸 + 毛玻璃效果 */
+.tmd-notifier {
+  display: none;
+  position: fixed;
+  left: 20px;
+  bottom: 20px;
+  color: rgb(15, 20, 25);
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(12px) saturate(180%);
+  -webkit-backdrop-filter: blur(12px) saturate(180%);
+  border: 1px solid rgba(207, 217, 222, 0.8);
+  border-radius: 20px;
+  padding: 12px 16px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.04);
+  font-size: 15px;
+  font-weight: 500;
+  transition: all 0.2s ease;
+  z-index: 9999;
+}
+
+.tmd-notifier.running {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  animation: slideIn 0.3s ease;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.tmd-notifier label {
+  display: inline-flex;
+  align-items: center;
+  margin: 0 2px;
+  padding: 6px 8px;
+  border-radius: 10px;
+  transition: background-color 0.2s;
+  font-variant-numeric: tabular-nums;
+  min-width: 32px;
+  justify-content: center;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.tmd-notifier label:hover {
+  background-color: rgba(15, 20, 25, 0.05);
+}
+
+.tmd-notifier label:before {
+  content: " ";
+  width: 24px;
+  height: 24px;
+  margin-right: 6px;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: 20px 20px;
+  display: inline-block;
+}
+
+.tmd-notifier label:nth-child(1):before {
+  background-image: url("data:image/svg+xml;charset=utf8,<svg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24'><path d='M3,14 v5 q0,2 2,2 h14 q2,0 2,-2 v-5 M7,10 l4,4 q1,1 2,0 l4,-4 M12,3 v11' fill='none' stroke='%23536471' stroke-width='2' stroke-linecap='round' /></svg>");
+}
+
+.tmd-notifier label:nth-child(2):before {
+  background-image: url("data:image/svg+xml;charset=utf8,<svg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24'><path d='M12,2 a1,1 0 0 1 0,20 a1,1 0 0 1 0,-20 M12,5 v7 h6' fill='none' stroke='%23536471' stroke-width='2' stroke-linejoin='round' stroke-linecap='round' /></svg>");
+}
+
+.tmd-notifier label:nth-child(3):before {
+  background-image: url("data:image/svg+xml;charset=utf8,<svg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24'><path d='M12,0 a2,2 0 0 0 0,24 a2,2 0 0 0 0,-24' fill='%23f91880' stroke='none' /><path d='M14.5,5 a1,1 0 0 0 -5,0 l0.5,9 a1,1 0 0 0 4,0 z M12,17 a2,2 0 0 0 0,5 a2,2 0 0 0 0,-5' fill='%23fff' stroke='none' /></svg>");
+}
+
+.tmd-notifier label:last-child {
+  cursor: pointer;
+  padding: 6px 10px;
+  background-color: rgba(249, 24, 128, 0.1);
+  color: rgb(249, 24, 128);
+  border-radius: 10px;
+  font-weight: 700;
+}
+
+.tmd-notifier label:last-child:hover {
+  background-color: rgba(249, 24, 128, 0.15);
+}
+
+/* 深色模式下的通知器样式 */
+@media (prefers-color-scheme: dark) {
+  .tmd-notifier {
+    color: rgb(231, 233, 234);
+    background: rgba(32, 35, 39, 0.85);
+    backdrop-filter: blur(12px) saturate(180%);
+    -webkit-backdrop-filter: blur(12px) saturate(180%);
+    border-color: rgba(83, 100, 113, 0.4);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3), 0 1px 2px rgba(0, 0, 0, 0.2);
+  }
+  
+  .tmd-notifier label:hover {
+    background-color: rgba(239, 243, 244, 0.08);
+  }
+  
+  .tmd-notifier label:nth-child(1):before {
+    background-image: url("data:image/svg+xml;charset=utf8,<svg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24'><path d='M3,14 v5 q0,2 2,2 h14 q2,0 2,-2 v-5 M7,10 l4,4 q1,1 2,0 l4,-4 M12,3 v11' fill='none' stroke='%23E7E9EA' stroke-width='2' stroke-linecap='round' /></svg>");
+  }
+  
+  .tmd-notifier label:nth-child(2):before {
+    background-image: url("data:image/svg+xml;charset=utf8,<svg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24'><path d='M12,2 a1,1 0 0 1 0,20 a1,1 0 0 1 0,-20 M12,5 v7 h6' fill='none' stroke='%23E7E9EA' stroke-width='2' stroke-linejoin='round' stroke-linecap='round' /></svg>");
+  }
+  
+  .tmd-notifier label:last-child {
+    background-color: rgba(249, 24, 128, 0.15);
+  }
+  
+  .tmd-notifier label:last-child:hover {
+    background-color: rgba(249, 24, 128, 0.2);
+  }
+}
+
+/* 图片按钮样式 */
 .tmd-down.tmd-img {position: absolute; right: 0; bottom: 0; display: none !important;}
-.tmd-down.tmd-img > div {display: flex; border-radius: 99px; margin: 2px; background-color: rgba(255,255,255, 0.6);}
-.tmd-down.tmd-img > div > div {display: flex; margin: 6px; color: #fff !important;}
-.tmd-down.tmd-img:not(:hover) > div > div {filter: drop-shadow(0 0 1px #000);}
-.tmd-down.tmd-img:hover > div > div {color: rgba(15, 20, 25, 1.0);}
+.tmd-down.tmd-img > div {
+  display: flex;
+  border-radius: 99px;
+  margin: 2px;
+  background-color: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(8px);
+  transition: all 0.2s;
+}
+.tmd-down.tmd-img > div > div {display: flex; margin: 6px; color: rgb(15, 20, 25) !important;}
+.tmd-down.tmd-img:not(:hover) > div > div {filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.5));}
+.tmd-down.tmd-img:hover > div {background-color: rgba(255, 255, 255, 0.9);}
+.tmd-down.tmd-img:hover > div > div {color: rgb(15, 20, 25) !important;}
+
+@media (prefers-color-scheme: dark) {
+  .tmd-down.tmd-img > div {background-color: rgba(0, 0, 0, 0.7);}
+  .tmd-down.tmd-img > div > div {color: rgb(239, 243, 244) !important;}
+  .tmd-down.tmd-img:not(:hover) > div > div {filter: drop-shadow(0 0 1px rgba(255, 255, 255, 0.5));}
+  .tmd-down.tmd-img:hover > div {background-color: rgba(0, 0, 0, 0.9);}
+  .tmd-down.tmd-img:hover > div > div {color: rgb(239, 243, 244) !important;}
+}
+
 :hover > .tmd-down.tmd-img, .tmd-img.loading, .tmd-img.completed, .tmd-img.failed {display: block !important;}
 .tweet-detail-action-item {width: 20% !important;}
 `,
