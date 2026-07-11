@@ -17,7 +17,7 @@
 // @grant              GM_download
 // @match              https://x.com/*
 // @match              https://twitter.com/*
-// @version            2025.12.06.003
+// @version            2026.07.11.001
 // @downloadURL https://raw.githubusercontent.com/leisurefire/TwitterMediaDownloader/refs/heads/main/script.js
 // @updateURL https://raw.githubusercontent.com/leisurefire/TwitterMediaDownloader/refs/heads/main/script.js
 // ==/UserScript==
@@ -56,6 +56,7 @@ const TMD = (function () {
                 ms.forEach((m) => m.addedNodes.forEach((node) => this.detect(node)))
             );
             observer.observe(document.body, { childList: true, subtree: true });
+            this.addMediaPageButton();
         },
         exportHistory: async function () {
             try {
@@ -112,6 +113,7 @@ const TMD = (function () {
             return `[${user_name} (@${user.screen_name})](https://x.com/i/web/status/${tweet_id})\n>  ${full_text}\n`;
         },
         detect: function (node) {
+            this.addMediaPageButton();
             let article =
                 (node.tagName == "ARTICLE" && node) ||
                 (node.tagName == "DIV" &&
@@ -122,6 +124,120 @@ const TMD = (function () {
                     node.getAttribute("role") == "listitem" && [node]) ||
                 (node.tagName == "DIV" && node.querySelectorAll('li[role="listitem"]'));
             if (listitems) this.addButtonToMedia(listitems);
+        },
+        addMediaPageButton: function () {
+            let match = location.pathname.match(/^\/([^/]+)\/media\/?$/);
+            if (!match || document.querySelector(".tmd-download-all")) return;
+            let tab = document.querySelector(`a[href="/${match[1]}/media"][role="tab"]`);
+            if (!tab || !tab.parentNode) return;
+            let btn = tab.cloneNode(true);
+            btn.removeAttribute("href");
+            btn.removeAttribute("aria-selected");
+            btn.classList.add("tmd-download-all");
+            let span = btn.querySelector("span");
+            if (span) span.textContent = lang.download_all;
+            let indicator = btn.querySelector('[style*="background-color"]');
+            if (indicator) indicator.remove();
+            btn.onclick = (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                this.downloadAllMedia(btn);
+            };
+            tab.parentNode.insertBefore(btn, tab.nextSibling);
+        },
+        downloadAllMedia: async function (btn) {
+            if (btn.classList.contains("loading")) return;
+            btn.classList.add("loading");
+            let originalTitle = btn.title;
+            try {
+                let ids = new Set();
+                let stable = 0;
+                let previousSize = -1;
+                while (stable < 5) {
+                    document.querySelectorAll('article a[href*="/status/"]').forEach((a) => {
+                        let id = a.href.match(/\/status\/(\d+)/)?.[1];
+                        if (id) ids.add(id);
+                    });
+                    stable = ids.size === previousSize ? stable + 1 : 0;
+                    previousSize = ids.size;
+                    btn.title = `${lang.collecting}: ${ids.size}`;
+                    window.scrollTo(0, document.body.scrollHeight);
+                    await this.sleep(1200);
+                }
+                let results = await this.mapLimit([...ids], 2, async (id) => {
+                    try { return await this.createDownloadTasks(id); }
+                    catch (error) { console.error("TMD batch parse failed", id, error); return []; }
+                });
+                let tasks = results.flat();
+                if (!tasks.length) {
+                    alert(lang.no_media);
+                    return;
+                }
+                if (!confirm(lang.download_all_confirm.replace("{count}", tasks.length))) return;
+                await this.downloadTasks(tasks, btn);
+                alert(lang.download_all_done.replace("{count}", tasks.length));
+            } finally {
+                btn.classList.remove("loading");
+                btn.title = originalTitle;
+            }
+        },
+        createDownloadTasks: async function (status_id) {
+            let out = (await GM_getValue("filename", filename)).split("\n").join("");
+            let json = await this.fetchJson(status_id);
+            let tweet = json.quoted_status_result?.result?.legacy?.media ||
+                json.quoted_status_result?.result?.legacy || json.legacy;
+            let user = json.core.user_results.result.legacy;
+            let invalid = /[\\/|<>*?:"\u200b-\u200d\u2060\ufeff]/g;
+            let datetime = out.match(/\{date-time(-local)?:[^{}]+\}/)
+                ? out.match(/\{date-time(?:-local)?:([^{}]+)\}/)[1].replace(invalid, "-")
+                : "YYYYMMDD-hhmmss";
+            let medias = tweet.extended_entities?.media;
+            if (!Array.isArray(medias)) return [];
+            return medias.map((media, i) => {
+                let url = media.type === "photo" ? media.media_url_https + ":orig" :
+                    media.video_info.variants.filter((v) => v.content_type === "video/mp4")
+                        .sort((a, b) => b.bitrate - a.bitrate)[0]?.url;
+                if (!url) return null;
+                let file = url.split("/").pop().split(/[:?]/).shift();
+                let info = {
+                    "status-id": status_id, "user-name": user.name.replace(invalid, "-"),
+                    "user-id": user.screen_name, "date-time": this.formatDate(tweet.created_at, datetime),
+                    "date-time-local": this.formatDate(tweet.created_at, datetime, true),
+                    "full-text": tweet.full_text.replace(/\s*https:\/\/t\.co\/\w+/g, "").replace(invalid, "-"),
+                    "file-name": file.split(".").shift(), "file-ext": file.split(".").pop(),
+                    "file-type": media.type.replace("animated_", "")
+                };
+                let name = (out.replace(/\.?\{file-ext\}/, "") +
+                    (medias.length > 1 && !out.match("{file-name}") ? "-" + i : "") + ".{file-ext}")
+                    .replace(/\{([^{}:]+)(:[^{}]+)?\}/g, (m, key) => info[key]);
+                return { url, name };
+            }).filter(Boolean);
+        },
+        mapLimit: async function (items, limit, worker) {
+            let results = new Array(items.length), next = 0;
+            await Promise.all(Array.from({ length: Math.min(limit, items.length) }, async () => {
+                while (next < items.length) { let i = next++; results[i] = await worker(items[i]); }
+            }));
+            return results;
+        },
+        sleep: function (ms) { return new Promise((resolve) => setTimeout(resolve, ms)); },
+        downloadTasks: async function (tasks, btn) {
+            let done = 0;
+            await this.mapLimit(tasks, 4, (task) => new Promise((resolve) => {
+                let attempt = (retry = 0) => GM_download({
+                    url: task.url, name: task.name,
+                    onload: () => { btn.title = `${++done}/${tasks.length}`; resolve(); },
+                    onerror: async (error) => {
+                        let rateLimited = /429|rate/i.test(JSON.stringify(error));
+                        if (rateLimited && retry < 6) {
+                            let wait = Math.min(60000, 5000 * Math.pow(2, retry));
+                            btn.title = `${lang.rate_limited} (${Math.ceil(wait / 1000)}s)`;
+                            await this.sleep(wait); attempt(retry + 1);
+                        } else { console.error("TMD batch download failed", task, error); resolve(); }
+                    }
+                });
+                attempt();
+            }));
         },
         addButtonTo: function (article) {
             if (article.dataset.detected) return;
@@ -573,7 +689,7 @@ const TMD = (function () {
                 wapper.remove();
             };
         },
-        fetchJson: async function (status_id) {
+        fetchJson: async function (status_id, retry = 0) {
             let base_url = `https://${host}/i/api/graphql/2ICDjqPd81tulZcYrtpTuQ/TweetResultByRestId`;
             let variables = {
                 tweetId: status_id,
@@ -635,9 +751,18 @@ const TMD = (function () {
                 "x-csrf-token": cookies.ct0,
             };
             if (cookies.ct0.length == 32) headers["x-guest-token"] = cookies.gt;
-            let tweet_detail = await fetch(url, { headers: headers }).then((result) =>
-                result.json()
-            );
+            let response = await fetch(url, { headers: headers });
+            if (response.status === 429 && retry < 6) {
+                let retryAfter = Number(response.headers.get("retry-after"));
+                let reset = Number(response.headers.get("x-rate-limit-reset"));
+                let wait = retryAfter ? retryAfter * 1000 :
+                    reset ? Math.max(1000, reset * 1000 - Date.now()) :
+                    Math.min(60000, 5000 * Math.pow(2, retry));
+                await this.sleep(wait);
+                return this.fetchJson(status_id, retry + 1);
+            }
+            if (!response.ok) throw new Error(`Twitter API HTTP ${response.status}`);
+            let tweet_detail = await response.json();
             let tweet_result = tweet_detail.data.tweetResult.result;
             return tweet_result.tweet || tweet_result;
         },
@@ -704,6 +829,9 @@ const TMD = (function () {
         language: {
             en: {
                 download: "Download",
+                download_all: "Download all", collecting: "Collecting", no_media: "No media found",
+                download_all_confirm: "Found {count} media files. Start downloading?",
+                download_all_done: "Finished processing {count} media files.", rate_limited: "Rate limited, waiting",
                 completed: "Download Completed",
                 settings: "Settings",
                 dialog: {
@@ -718,6 +846,9 @@ const TMD = (function () {
             },
             ja: {
                 download: "ダウンロード",
+                download_all: "すべて保存", collecting: "収集中", no_media: "メディアが見つかりません",
+                download_all_confirm: "{count} 件のメディアをダウンロードしますか？",
+                download_all_done: "{count} 件の処理が完了しました。", rate_limited: "制限中、待機しています",
                 completed: "ダウンロード完了",
                 settings: "設定",
                 dialog: {
@@ -732,6 +863,9 @@ const TMD = (function () {
             },
             zh: {
                 download: "下载",
+                download_all: "下载全部", collecting: "正在收集", no_media: "未找到媒体",
+                download_all_confirm: "共找到 {count} 个媒体文件，是否开始下载？",
+                download_all_done: "已完成 {count} 个媒体文件的处理。", rate_limited: "遇到速率限制，正在等待",
                 completed: "下载完成",
                 settings: "设置",
                 dialog: {
@@ -746,6 +880,9 @@ const TMD = (function () {
             },
             "zh-Hant": {
                 download: "下載",
+                download_all: "下載全部", collecting: "正在收集", no_media: "未找到媒體",
+                download_all_confirm: "共找到 {count} 個媒體檔案，是否開始下載？",
+                download_all_done: "已完成 {count} 個媒體檔案的處理。", rate_limited: "遇到速率限制，正在等待",
                 completed: "下載完成",
                 settings: "設置",
                 dialog: {
