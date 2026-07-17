@@ -17,7 +17,7 @@
 // @grant              GM_download
 // @match              https://x.com/*
 // @match              https://twitter.com/*
-// @version            2026.07.11.001
+// @version            2026.07.16.001
 // @downloadURL https://raw.githubusercontent.com/leisurefire/TwitterMediaDownloader/refs/heads/main/script.js
 // @updateURL https://raw.githubusercontent.com/leisurefire/TwitterMediaDownloader/refs/heads/main/script.js
 // ==/UserScript==
@@ -127,28 +127,56 @@ const TMD = (function () {
         },
         addMediaPageButton: function () {
             let match = location.pathname.match(/^\/([^/]+)\/media\/?$/);
-            if (!match || document.querySelector(".tmd-download-all")) return;
+            let existing = document.querySelector(".tmd-download-all-container");
+            if (!match) {
+                if (existing) existing.remove();
+                return;
+            }
+            if (existing) {
+                if (existing.dataset.path === location.pathname) return;
+                existing.remove();
+            }
             let tab = document.querySelector(`a[href="/${match[1]}/media"][role="tab"]`);
-            if (!tab || !tab.parentNode) return;
-            let btn = tab.cloneNode(true);
+            let tabItem = tab?.parentElement;
+            if (!tabItem || !tabItem.parentNode) return;
+
+            // X wraps every tab link in a layout item. Clone and insert the whole
+            // item so the batch action cannot overlap the original media tab.
+            let item = tabItem.cloneNode(true);
+            let btn = item.querySelector('a[role="tab"]');
+            if (!btn) return;
+            item.classList.add("tmd-download-all-container");
+            item.dataset.path = location.pathname;
             btn.removeAttribute("href");
             btn.removeAttribute("aria-selected");
             btn.classList.add("tmd-download-all");
-            let span = btn.querySelector("span");
+            btn.setAttribute("role", "button");
+            btn.setAttribute("tabindex", "0");
+            let span = Array.from(btn.querySelectorAll("span")).find(
+                (node) => !node.querySelector("span")
+            );
             if (span) span.textContent = lang.download_all;
             let indicator = btn.querySelector('[style*="background-color"]');
             if (indicator) indicator.remove();
-            btn.onclick = (event) => {
+            let activate = (event) => {
                 event.preventDefault();
                 event.stopPropagation();
                 this.downloadAllMedia(btn);
             };
-            tab.parentNode.insertBefore(btn, tab.nextSibling);
+            btn.addEventListener("click", activate);
+            btn.addEventListener("keydown", (event) => {
+                if (event.key === "Enter" || event.key === " ") activate(event);
+            });
+            tabItem.parentNode.insertBefore(item, tabItem.nextSibling);
         },
         downloadAllMedia: async function (btn) {
             if (btn.classList.contains("loading")) return;
             btn.classList.add("loading");
             let originalTitle = btn.title;
+            let label = Array.from(btn.querySelectorAll("span")).find(
+                (node) => !node.querySelector("span")
+            );
+            let originalLabel = label?.textContent;
             try {
                 let ids = new Set();
                 let stable = 0;
@@ -161,6 +189,7 @@ const TMD = (function () {
                     stable = ids.size === previousSize ? stable + 1 : 0;
                     previousSize = ids.size;
                     btn.title = `${lang.collecting}: ${ids.size}`;
+                    if (label) label.textContent = `${lang.collecting}: ${ids.size}`;
                     window.scrollTo(0, document.body.scrollHeight);
                     await this.sleep(1200);
                 }
@@ -176,9 +205,13 @@ const TMD = (function () {
                 if (!confirm(lang.download_all_confirm.replace("{count}", tasks.length))) return;
                 await this.downloadTasks(tasks, btn);
                 alert(lang.download_all_done.replace("{count}", tasks.length));
+            } catch (error) {
+                console.error("TMD batch download failed", error);
+                alert(lang.download_all_failed.replace("{error}", error?.message || error));
             } finally {
                 btn.classList.remove("loading");
                 btn.title = originalTitle;
+                if (label) label.textContent = originalLabel;
             }
         },
         createDownloadTasks: async function (status_id) {
@@ -832,6 +865,7 @@ const TMD = (function () {
                 download_all: "Download all", collecting: "Collecting", no_media: "No media found",
                 download_all_confirm: "Found {count} media files. Start downloading?",
                 download_all_done: "Finished processing {count} media files.", rate_limited: "Rate limited, waiting",
+                download_all_failed: "Batch download failed: {error}",
                 completed: "Download Completed",
                 settings: "Settings",
                 dialog: {
@@ -849,6 +883,7 @@ const TMD = (function () {
                 download_all: "すべて保存", collecting: "収集中", no_media: "メディアが見つかりません",
                 download_all_confirm: "{count} 件のメディアをダウンロードしますか？",
                 download_all_done: "{count} 件の処理が完了しました。", rate_limited: "制限中、待機しています",
+                download_all_failed: "一括ダウンロードに失敗しました: {error}",
                 completed: "ダウンロード完了",
                 settings: "設定",
                 dialog: {
@@ -866,6 +901,7 @@ const TMD = (function () {
                 download_all: "下载全部", collecting: "正在收集", no_media: "未找到媒体",
                 download_all_confirm: "共找到 {count} 个媒体文件，是否开始下载？",
                 download_all_done: "已完成 {count} 个媒体文件的处理。", rate_limited: "遇到速率限制，正在等待",
+                download_all_failed: "批量下载失败：{error}",
                 completed: "下载完成",
                 settings: "设置",
                 dialog: {
@@ -883,6 +919,7 @@ const TMD = (function () {
                 download_all: "下載全部", collecting: "正在收集", no_media: "未找到媒體",
                 download_all_confirm: "共找到 {count} 個媒體檔案，是否開始下載？",
                 download_all_done: "已完成 {count} 個媒體檔案的處理。", rate_limited: "遇到速率限制，正在等待",
+                download_all_failed: "批量下載失敗：{error}",
                 completed: "下載完成",
                 settings: "設置",
                 dialog: {
