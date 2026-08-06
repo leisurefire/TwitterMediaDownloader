@@ -17,7 +17,7 @@
 // @grant              GM_download
 // @match              https://x.com/*
 // @match              https://twitter.com/*
-// @version            2026.07.16.001
+// @version            2026.08.07.001
 // @downloadURL https://raw.githubusercontent.com/leisurefire/TwitterMediaDownloader/refs/heads/main/script.js
 // @updateURL https://raw.githubusercontent.com/leisurefire/TwitterMediaDownloader/refs/heads/main/script.js
 // ==/UserScript==
@@ -194,17 +194,41 @@ const TMD = (function () {
                     await this.sleep(1200);
                 }
                 let results = await this.mapLimit([...ids], 2, async (id) => {
-                    try { return await this.createDownloadTasks(id); }
-                    catch (error) { console.error("TMD batch parse failed", id, error); return []; }
+                    try { return { id, tasks: await this.createDownloadTasks(id) }; }
+                    catch (error) {
+                        console.error("TMD batch parse failed", id, error);
+                        return { id, tasks: [] };
+                    }
                 });
-                let tasks = results.flat();
-                if (!tasks.length) {
+                let groups = results.filter((result) => result.tasks.length);
+                let total = groups.reduce((count, result) => count + result.tasks.length, 0);
+                if (!total) {
                     alert(lang.no_media);
                     return;
                 }
-                if (!confirm(lang.download_all_confirm.replace("{count}", tasks.length))) return;
-                await this.downloadTasks(tasks, btn);
-                alert(lang.download_all_done.replace("{count}", tasks.length));
+                if (!confirm(lang.download_all_confirm.replace("{count}", total))) return;
+
+                // A batch is deliberately a sequence of normal per-tweet downloads.
+                // This keeps browser download prompts, history and error handling in
+                // the same path as clicking every tweet's download button by hand.
+                let saveHistory = await GM_getValue("save_history", true);
+                let completed = 0;
+                let failed = 0;
+                for (let group of groups) {
+                    let result = await this.downloader.add(
+                        group.tasks,
+                        null,
+                        saveHistory,
+                        history.indexOf(group.id) >= 0,
+                        group.id
+                    );
+                    completed += result.completed;
+                    failed += result.failed;
+                    btn.title = `${completed + failed}/${total}`;
+                    if (label) label.textContent = `${completed + failed}/${total}`;
+                }
+                if (failed) throw new Error(`${completed}/${total} succeeded, ${failed} failed`);
+                alert(lang.download_all_done.replace("{count}", completed));
             } catch (error) {
                 console.error("TMD batch download failed", error);
                 alert(lang.download_all_failed.replace("{error}", error?.message || error));
@@ -214,18 +238,25 @@ const TMD = (function () {
                 if (label) label.textContent = originalLabel;
             }
         },
-        createDownloadTasks: async function (status_id) {
+        createDownloadTasks: async function (status_id, index) {
             let out = (await GM_getValue("filename", filename)).split("\n").join("");
             let json = await this.fetchJson(status_id);
             let tweet = json.quoted_status_result?.result?.legacy?.media ||
                 json.quoted_status_result?.result?.legacy || json.legacy;
             let user = json.core.user_results.result.legacy;
+            let invalidChars = {
+                "\\": "＼", "/": "／", "|": "｜", "<": "＜", ">": "＞",
+                ":": "：", "*": "＊", "?": "？", '"': "＂", "\u200b": "",
+                "\u200c": "", "\u200d": "", "\u2060": "", "\ufeff": "", "🔞": ""
+            };
             let invalid = /[\\/|<>*?:"\u200b-\u200d\u2060\ufeff]/g;
+            let replaceInvalid = (value) => value.replace(invalid, (char) => invalidChars[char]);
             let datetime = out.match(/\{date-time(-local)?:[^{}]+\}/)
-                ? out.match(/\{date-time(?:-local)?:([^{}]+)\}/)[1].replace(invalid, "-")
+                ? replaceInvalid(out.match(/\{date-time(?:-local)?:([^{}]+)\}/)[1])
                 : "YYYYMMDD-hhmmss";
             let medias = tweet.extended_entities?.media;
             if (!Array.isArray(medias)) return [];
+            if (index) medias = medias[index - 1] ? [medias[index - 1]] : [];
             return medias.map((media, i) => {
                 let url = media.type === "photo" ? media.media_url_https + ":orig" :
                     media.video_info.variants.filter((v) => v.content_type === "video/mp4")
@@ -233,15 +264,17 @@ const TMD = (function () {
                 if (!url) return null;
                 let file = url.split("/").pop().split(/[:?]/).shift();
                 let info = {
-                    "status-id": status_id, "user-name": user.name.replace(invalid, "-"),
+                    "status-id": status_id, "user-name": replaceInvalid(user.name).replace(/🔞/g, ""),
                     "user-id": user.screen_name, "date-time": this.formatDate(tweet.created_at, datetime),
                     "date-time-local": this.formatDate(tweet.created_at, datetime, true),
-                    "full-text": tweet.full_text.replace(/\s*https:\/\/t\.co\/\w+/g, "").replace(invalid, "-"),
+                    "full-text": replaceInvalid(tweet.full_text.split("\n").join(" ")
+                        .replace(/\s*https:\/\/t\.co\/\w+/g, "")),
                     "file-name": file.split(".").shift(), "file-ext": file.split(".").pop(),
                     "file-type": media.type.replace("animated_", "")
                 };
                 let name = (out.replace(/\.?\{file-ext\}/, "") +
-                    (medias.length > 1 && !out.match("{file-name}") ? "-" + i : "") + ".{file-ext}")
+                    ((medias.length > 1 || index) && !out.match("{file-name}")
+                        ? "-" + (index ? index - 1 : i) : "") + ".{file-ext}")
                     .replace(/\{([^{}:]+)(:[^{}]+)?\}/g, (m, key) => info[key]);
                 return { url, name };
             }).filter(Boolean);
@@ -254,24 +287,6 @@ const TMD = (function () {
             return results;
         },
         sleep: function (ms) { return new Promise((resolve) => setTimeout(resolve, ms)); },
-        downloadTasks: async function (tasks, btn) {
-            let done = 0;
-            await this.mapLimit(tasks, 4, (task) => new Promise((resolve) => {
-                let attempt = (retry = 0) => GM_download({
-                    url: task.url, name: task.name,
-                    onload: () => { btn.title = `${++done}/${tasks.length}`; resolve(); },
-                    onerror: async (error) => {
-                        let rateLimited = /429|rate/i.test(JSON.stringify(error));
-                        if (rateLimited && retry < 6) {
-                            let wait = Math.min(60000, 5000 * Math.pow(2, retry));
-                            btn.title = `${lang.rate_limited} (${Math.ceil(wait / 1000)}s)`;
-                            await this.sleep(wait); attempt(retry + 1);
-                        } else { console.error("TMD batch download failed", task, error); resolve(); }
-                    }
-                });
-                attempt();
-            }));
-        },
         addButtonTo: function (article) {
             if (article.dataset.detected) return;
             article.dataset.detected = "true";
@@ -387,94 +402,16 @@ const TMD = (function () {
         click: async function (btn, status_id, is_exist, index) {
             if (btn.classList.contains("loading")) return;
             this.status(btn, "loading");
-            let out = (await GM_getValue("filename", filename)).split("\n").join("");
-            let save_history = await GM_getValue("save_history", true);
-            let json = await this.fetchJson(status_id);
-            let tweet =
-                json.quoted_status_result?.result?.legacy?.media || //此媒体存在,属于引用推文
-                json.quoted_status_result?.result?.legacy ||
-                json.legacy;
-            let user = json.core.user_results.result.legacy;
-            let invalid_chars = {
-                "\\": "＼",
-                "/": "／",
-                "|": "｜",
-                "<": "＜",
-                ">": "＞",
-                ":": "：",
-                "*": "＊",
-                "?": "？",
-                '"': "＂",
-                "\u200b": "",
-                "\u200c": "",
-                "\u200d": "",
-                "\u2060": "",
-                "\ufeff": "",
-                "🔞": "",
-            };
-            let datetime = out.match(/\{date-time(-local)?:[^{}]+\}/)
-                ? out
-                    .match(/\{date-time(?:-local)?:([^{}]+)\}/)[1]
-                    .replace(/[\\/|<>*?:"]/g, (v) => invalid_chars[v])
-                : "YYYYMMDD-hhmmss";
-            let info = {};
-            info["status-id"] = status_id;
-            info["user-name"] = user.name.replace(
-                /([\\/|*?:"\u200b-\u200d\u2060\ufeff]|🔞)/g,
-                (v) => invalid_chars[v]
-            );
-            info["user-id"] = user.screen_name;
-            info["date-time"] = this.formatDate(tweet.created_at, datetime);
-            info["date-time-local"] = this.formatDate(
-                tweet.created_at,
-                datetime,
-                true
-            );
-            info["full-text"] = tweet.full_text
-                .split("\n")
-                .join(" ")
-                .replace(/\s*https:\/\/t\.co\/\w+/g, "")
-                .replace(
-                    /[\\/|<>*?:"\u200b-\u200d\u2060\ufeff]/g,
-                    (v) => invalid_chars[v]
-                );
-            let medias = tweet.extended_entities && tweet.extended_entities.media;
-            if (json?.card) {
-                this.status(
-                    btn,
-                    "failed",
-                    "This tweet contains a link, which is not supported by this script."
-                );
-                return;
-            }
-            if (!Array.isArray(medias)) {
-                this.status(btn, "failed", "MEDIA_NOT_FOUND");
-                return;
-            }
-            if (index) medias = [medias[index - 1]];
-            if (medias.length > 0) {
-                let tasks = medias.map((media, i) => {
-                    info.url =
-                        media.type == "photo"
-                            ? media.media_url_https + ":orig"
-                            : media.video_info.variants
-                                .filter((n) => n.content_type == "video/mp4")
-                                .sort((a, b) => b.bitrate - a.bitrate)[0].url;
-                    info.file = info.url.split("/").pop().split(/[:?]/).shift();
-                    info["file-name"] = info.file.split(".").shift();
-                    info["file-ext"] = info.file.split(".").pop();
-                    info["file-type"] = media.type.replace("animated_", "");
-                    info.out = (
-                        out.replace(/\.?\{file-ext\}/, "") +
-                        ((medias.length > 1 || index) && !out.match("{file-name}")
-                            ? "-" + (index ? index - 1 : i)
-                            : "") +
-                        ".{file-ext}"
-                    ).replace(/\{([^{}:]+)(:[^{}]+)?\}/g, (match, name) => info[name]);
-                    return { url: info.url, name: info.out };
-                });
-                this.downloader.add(tasks, btn, save_history, is_exist, status_id);
-            } else {
+            try {
+                let tasks = await this.createDownloadTasks(status_id, index);
+                if (!tasks.length) {
+                    this.status(btn, "failed", "MEDIA_NOT_FOUND");
+                    return;
+                }
+                let saveHistory = await GM_getValue("save_history", true);
+                await this.downloader.add(tasks, btn, saveHistory, is_exist, status_id);
+            } catch (error) {
+                console.error("TMD download failed", status_id, error);
                 this.status(btn, "failed", "MEDIA_NOT_FOUND");
             }
         },
@@ -488,38 +425,60 @@ const TMD = (function () {
                 add: function (taskList, btn, save_history, is_exist, status_id) {
                     tasks.push(...taskList);
                     let completedCount = 0;
-                    let hasError = false;
+                    let failedCount = 0;
 
-                    taskList.forEach((task) => {
-                        thread++;
-                        this.update();
+                    return new Promise((resolve) => {
+                        let finish = () => {
+                            if (completedCount + failedCount !== taskList.length) return;
+                            if (!failedCount) {
+                                if (btn) this.status(btn, "completed", lang.completed);
+                                if (save_history && !is_exist) {
+                                    history.push(status_id);
+                                    this.storage(status_id);
+                                }
+                            }
+                            resolve({ completed: completedCount, failed: failedCount });
+                        };
 
-                        GM_download({
-                            url: task.url,
-                            name: task.name,
-                            onload: () => {
+                        if (!taskList.length) {
+                            finish();
+                            return;
+                        }
+
+                        taskList.forEach((task) => {
+                            thread++;
+                            this.update();
+                            let settled = false;
+
+                            let settle = (succeeded, result) => {
+                                if (settled) return;
+                                settled = true;
                                 thread--;
-                                tasks = tasks.filter((t) => t.url !== task.url);
-                                completedCount++;
-
-                                // Only mark as completed and save history after all files are done
-                                if (completedCount === taskList.length && !hasError) {
-                                    this.status(btn, "completed", lang.completed);
-                                    if (save_history && !is_exist) {
-                                        history.push(status_id);
-                                        this.storage(status_id);
-                                    }
+                                tasks = tasks.filter((queued) => queued !== task);
+                                if (succeeded) completedCount++;
+                                else {
+                                    failed++;
+                                    failedCount++;
+                                    if (btn) this.status(
+                                        btn,
+                                        "failed",
+                                        result?.details?.current || result?.error || "DOWNLOAD_FAILED"
+                                    );
                                 }
                                 this.update();
-                            },
-                            onerror: (result) => {
-                                thread--;
-                                failed++;
-                                hasError = true;
-                                tasks = tasks.filter((t) => t.url !== task.url);
-                                this.status(btn, "failed", result.details.current);
-                                this.update();
-                            },
+                                finish();
+                            };
+
+                            try {
+                                GM_download({
+                                    url: task.url,
+                                    name: task.name,
+                                    onload: () => settle(true),
+                                    onerror: (result) => settle(false, result),
+                                });
+                            } catch (error) {
+                                settle(false, error);
+                            }
                         });
                     });
                 },
